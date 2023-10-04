@@ -1,0 +1,432 @@
+---
+title: "Customer Segmentation Project"  
+subtitle: "Block 1: Customer Analytics Project as part of the Ignitus Scholar Internship"  
+author: "Raymond Lukwago A.R"
+date: "`r format(Sys.time(), '%d-%B-%Y')`"   
+output:  
+  prettydoc::html_pretty:  
+    theme: architect   
+    toc: yes  
+    df_print: paged 
+    highlight: vignette  
+---
+## 1.0 Determine the client business needs  
+
+This project used the **Single Discrete variable** customer segmentation technique to achieve its objective. More specifically, the project used according to [Aravind, H. (2023)](https://rfm.rsquaredacademy.com/articles/rfm-customer-level-data.html#segmented-customer-data) the **RFM** (recency, frequency, monetary) analysis. This is a behavioural based technique used to segment customers by examining their transaction history as to:  
+
+1) how recently a customer has purchased (recency)  
+2) how often they purchase (frequency)  
+3) how much the customer spends (monetary)  
+
+Essentially, the methodological framework is based off the **pareto principle** that: *80 percent of your business comes from 20 percent of your customers*. The RFM analysis combines the above three customer attributes to rank customers i.e., If they bought in the recent past, they get higher points. If they bought many times, they get higher scores. And if they spent bigger, they get more points. Combined togeter, these three scores create the **Recency - Frequency - Monetary** (RFM) **score**.  
+
+Finally, I segmented the customer database into different groups based on this *RFM score*.
+
+### 1.1 Project Objective
+
+This project intended:  
+
+> To strategically assist an E-Commence enterprise in identifying and characterising a select group of high-value customers (VIPs), ensuring that this chosen cluster of possesses substantial economic potential for targeted marketing efforts.  
+
+### 1.2 Project Questions
+
+Therefore, the project assignment was guided by the following questions:  
+
+a) Which group of customers make up the high-value customer (VIPs) segment?
+b) What characteristics are common amongst the above select group of high-value customers?
+
+### 1.3 Implementation Process  
+
+i) Determine the client business needs  
+ii) Data Sourcing, Cleaning & Exploration  
+iii) Feature Creation  
+iv) Feature Selection  
+v) Apply RFM Customer Segment Technique  
+vi) Analyse Results & Characterize Segment
+
+### 1.4 About the Data
+
+The Online retail data set was obtained from [UCI Machine Learning Repository](https://archive.ics.uci.edu/dataset/352/online+retail). The data set contains transaction data occurring between **01/12/2010** and **09/12/2011** for a UK-based and registered online retail store. The company mainly sells unique all-occasion gifts. **NB:** Many customers of the company are wholesalers.
+
+## 2.0 Data Sourcing, Cleaning & Exploration
+
+### 2.1 Data Sourcing  
+
+#### Import all Necessary Libraries
+
+Installed and loaded all necessary packages for this project. For Data cleaning and exploration, *tidyverse* was used. *GGplot, treemapify and naniar* were used for visualization of, general plots, 3D Matrix plots and missing values respectively. *Knitr and PrettyDoc* was used for R-Markdown templating.
+```{r, include=FALSE, warning=FALSE}
+library(tidyverse)
+library(data.table)
+# Package for working with Missing Values
+library(naniar)
+library(stringr)
+# Package tools for working with Categorical Factors
+library(forcats)
+# Package tools for RFM Analysis
+library(rfm)
+# Package tools for building visualisations
+library(ggplot2)
+# Package Tools for developing a Treemap
+library(treemapify)
+# Package for nice color palette
+library(viridis)
+# Package for ggplot themes
+library(hrbrthemes)
+library(knitr)
+# HTML Document Knitr Theme Template
+library(prettydoc)
+```
+
+#### Set Working Directory
+```{r}
+knitr::opts_knit$set(root.dir = "F:/Projects/Customer_Segmentation_Project")
+```
+
+#### Load the Online Retail Data set
+```{r}
+df <- read.csv("Ecommerce.csv")
+```
+
+#### Initial Data Exploration  
+
+An initial exploration of the columns of the data set, type of the data object under each of the columns was done. This is required to understand if the columns and the data under each of the columns meets the overall data set features and variable types.
+
+```{r}
+kable(head(df, 10), longtable = TRUE, 
+      caption = "Table showing 1st 10 rows of the Original Dataset",
+      booktabs = TRUE)
+str(df)
+colnames(df)
+```
+
+From the initial exploration of the data set, you do realize that there exists one extra column named, **`r colnames(df)[9]`** that only contains **NA** values. Cross-checking with the original data set requirements above, this is not supposed to be part of the data set and thus was dropped the column from the data set. We also changed the **InvoiceDate** column to data type format, columns; **InvoiceNo, StockCode, Description, CustomerID** & **Country**
+
+We do make a copy of the original imported data set. We shall subsequently make all changes to this duplicate copy. This is a precautionary practice to keep an original that we can revert back to in case something goes wrong with the duplicate copy.
+
+```{r}
+dfCopy <-copy(df)
+# Remove the last undesired column
+dfCopy <- dplyr::select(dfCopy, -c(9))
+# Create a vector object of all columns supposed to be converted to Categorical Data Type
+categoricalColumns <- c('InvoiceNo', 'StockCode', 'Description', 'CustomerID', 'Country')
+dfCopy[categoricalColumns] <- lapply(dfCopy[categoricalColumns], as.factor)
+dfCopy$InvoiceDate <- as.Date(dfCopy$InvoiceDate, "%d-%b-%y")
+str(dfCopy)
+```
+
+### 2.2 Data Cleaning
+
+#### Check and Handle Missing Values
+
+The dfCopy data frame has to be further checked for missing values especially NA values in each of the columns. The aim to to remove any NA values under the primary key columns i.e., CustomerID that can be used to track the transaction data of each of customer across the time.
+Since all columns have zero NA values and only the CUstomerID column has 135,080 missing values. This accounts for 25% of the entire data frame. Since CustomerID column contains a unique Customer ID that identifies a customer (Primary Key), it is illogical to impute the missing values in some way and thus remove all rows with missing values.
+```{r}
+# Check for missing values under each of the data frame columns
+colSums(is.na(dfCopy))
+gg_miss_var(dfCopy)
+# Drop all rows under CustomerID column with missing values
+dfCopy <- dfCopy %>%
+  tidyr::drop_na(CustomerID)
+```
+
+#### Check and Handle Duplicates, Illogical values
+
+```{r}
+SumOfDuplicates <- sum(duplicated(dfCopy))
+count_starting_with_C <- sum(startsWith(as.character(dfCopy$InvoiceNo), 'C'))
+cleanedDf <- dfCopy %>%
+  mutate(InvNo_len = nchar(as.character(InvoiceNo))) %>%
+  dplyr::filter(InvNo_len <= 6) %>%
+  dplyr::distinct(.keep_all = TRUE)
+```
+
+Check for duplicate rows and remove them.  It was discovered that there are **`r SumOfDuplicates`** duplicate rows and these were removed.  We further removed **`r count_starting_with_C`** values under the Invoice ID column that started with letter **'c'**. This is because from the original data set these values meant a cancellation happened thus a transaction was not completed. During the exploration we discovered that there were illogical values under each of the main columns like the **Unit Price** and **Quantity** columns. Furthermore, it was discovered that all unit prices and quantities under the unit price or quantity columns did not make logical sense for this particular assignment since they were negatives.  
+
+Before, this stage of the preliminary analysis, the data frame was composed of  **`r nrow(dfCopy)`**observations. After, the cleaning processes above, we remained with a data frame composed of **`r nrow(cleanedDf)`** observations. We further crosschecked the cleaned data frame for duplicates and illogical values below and zero sums were returned.  
+```{r}
+count_start_with_C <- sum(startsWith(as.character(cleanedDf$InvoiceNo), 'C'))
+SumOfDups_After <- sum(duplicated(cleanedDf))
+```
+
+### 2.3 Data Exploration
+
+Conducted quick summary of the descriptive statistics on each of the **cleanedDf** data object to get a better understanding of the structure of our data under each of the columns.  
+
+From my summary I learned particularly for column **unit price** that had zero values. Under the **Country** column, I did also notice that there are country names presented as abbreviations. Under the country column, **38** different unique countries were presented and of these three; **USA, RSA** & **EIRE** were country names presented as abbreviations. One column under the same column was labelled **Unspecified**.  
+
+Since the percentage of rows that were labelled *Unspecified* accounted for less than 1% of the total data, we took a deliberate decision to remove all rows labelled, *Unspecified*. About the country abbreviations, I undertook some research and established that *EIRE* matches to the Irish Gaelic name for **Ireland**, *RSA* matches to **South Africa** and *USA* matches to **United States of America**. We replaced the mentioned country abbreviations as is below.
+
+Additionally, from the summary statistics we noticed that there were zero values under the **Unit Price** column. We decided to remove these since they could be representing order returns or errors I decided to remove all rows with zero values under the *unit price* column.
+```{r}
+summary(cleanedDf)
+cleanedDf %>%
+  group_by(Country) %>%
+  tally() %>%
+ungroup()
+```
+```{r}
+# Replace all rows in Country column that meets criteria in rep_str
+rep_str <- c('EIRE'='Ireland', 'USA'='United States of America', 'RSA'='South Africa')
+cleanedDf <- cleanedDf %>%
+  mutate(Country = stringr::str_replace_all(Country, rep_str)) %>%
+  filter(Country != 'Unspecified', UnitPrice != 0.000) %>%
+  mutate(Country = fct_relevel(Country), 
+         Revenue = Quantity * UnitPrice,
+         Recency_days = as.Date("2017-12-08") - InvoiceDate) %>%
+  dplyr::select(-c(2,3,9))
+```
+
+## 3.0 Feature Creation  
+
+From the above code pipeline, we further created a **Revenue** column to support us during the scoring process for the Monetary analysis i.e., *how much each of the customers transacted* in the given time frame. Calculation for the *Revenue* was done by multiplying the *unit price* and *quantity* columns for each of the rows in the data object. Furthermore, we created the **Time_Dist** column to support us during the weighting process for recency analysis.
+
+## 4.0 Feature Selection  
+
+Borrowing from the methodological framework of *RFM Analysis*, only kept the following columns; **Invoice No, Quantity, Invoice Date, Unit Price, CustomerID, Country, Time_Dist** and **Revenue**.  
+
+In order to create the RFM data set to be used for further analysis, we grouped the data set by unique *customer id* and created three additional columns namely; **Total Revenue, Recency Days** and **Total Orders**. The *Total Revenue* column was calculated from the sum of all revenues by a given customer, *Recency days* column is calculated from the most recent date of transaction purchase date (minimum value under Time_Dist column) and lastly the *Total Orders* column is calculated from the total number of transaction orders done by a particular customer i.e., Row count under each of the customer group.
+
+```{r}
+df_rfm <- cleanedDf %>%
+  group_by(CustomerID) %>%
+  summarise(
+    transaction_count = n(),
+    amount = sum(Revenue),
+    Recency_days = min(Recency_days)
+  ) %>%
+  ungroup()
+```
+
+### 4.1 Further Data Exploration  
+
+We further explored the distribution of the of the above transaction count, amount and Recency Days columns and they were all highly skewed to the left.
+```{r}
+df_rfm %>% 
+  ggplot(aes(x = transaction_count)) +
+  geom_density(color="darkblue", fill="lightblue") +
+  theme_minimal() +
+  labs(subtitle = "Frequency Distribution Plot for Transaction Count",
+       x = "Number of Transactions",
+       caption = stringr::str_glue("Data as of {as.Date('2017-12-08')}")) +
+  theme(
+    panel.grid = element_blank(),
+    panel.grid.major = element_line(color = "lightgrey", linewidth = 0.05, linetype = 1),
+    text = element_text(size = 10),
+    axis.text.x = element_text(hjust = 0.6, size = 10),
+    axis.text.y = element_text(hjust = 0.6, size = 10))
+```
+
+```{r}
+df_rfm %>% 
+  ggplot(aes(x = amount)) +
+  geom_density(color="darkblue", fill="lightblue") +
+  theme_minimal() +
+  labs(subtitle = "Frequency Distribution Plot for Total Revenue",
+       x = "Total Revenue",
+       caption = stringr::str_glue("Data as of {as.Date('2017-12-08')}")) +
+  theme(
+    panel.grid = element_blank(),
+    panel.grid.major = element_line(color = "lightgrey", linewidth = 0.05, linetype = 1),
+    text = element_text(size = 10),
+    axis.text.x = element_text(hjust = 0.6, size = 10),
+    axis.text.y = element_text(hjust = 0.6, size = 10))
+```
+
+```{r, warning=FALSE}
+df_rfm %>% 
+  ggplot(aes(x = Recency_days)) +
+  geom_density(color="darkblue", fill="lightblue") +
+  theme_minimal() +
+  labs(subtitle = "Frequency Distribution Plot for Minimum Recency Days",
+       x = "Minimum Last Date of Purchase",
+       caption = stringr::str_glue("Data as of {as.Date('2017-12-08')}")) +
+  theme(
+    panel.grid = element_blank(),
+    panel.grid.major = element_line(color = "lightgrey", linewidth = 0.05, linetype = 1),
+    text = element_text(size = 10),
+    axis.text.x = element_text(hjust = 0.6, size = 10),
+    axis.text.y = element_text(hjust = 0.6, size = 10))
+```
+
+## 5.0 Apply RFM Customer Segment Technique
+```{r}
+analysis_date = as.Date("2017-12-08")
+tmp_table <- rfm_table_customer(data = df_rfm,
+                               customer_id = CustomerID,
+                               n_transactions = transaction_count,
+                               recency_days = Recency_days,
+                               total_revenue = amount,
+                               analysis_date = analysis_date)
+rfm_table <- as.data.frame(tmp_table$rfm)
+```
+
+Based on the **RFM Score** created for each of the customers under the rfm_table, we further segmented the customers into 11 distinctive segments. Segments were based on the table outlined in this [article](https://www.putler.com/rfm-analysis/#Applying_the_RFM_score_formula). In our context all Customers labelled 'Champions' were our VIP group that we need to identify and further characterize.  
+
+```{r}
+segment_names <- c("VIPs", "Loyal Customers", "Potential Loyalist",
+  "New Customers", "Promising", "Need Attention", "About To Sleep",
+  "At Risk", "Can't Lose Them", "Lost")
+
+recency_lower <- c(4, 2, 3, 4, 3, 2, 2, 1, 1, 1)
+recency_upper <- c(5, 5, 5, 5, 4, 3, 3, 2, 1, 2)
+frequency_lower <- c(4, 3, 1, 1, 1, 2, 1, 2, 4, 1)
+frequency_upper <- c(5, 5, 3, 1, 1, 3, 2, 5, 5, 2)
+monetary_lower <- c(4, 3, 1, 1, 1, 2, 1, 2, 4, 1)
+monetary_upper <- c(5, 5, 3, 1, 1, 3, 2, 5, 5, 2)
+
+rfm_tab2 <- rfm_segment(tmp_table, segment_names, recency_lower, recency_upper,
+frequency_lower, frequency_upper, monetary_lower, monetary_upper)
+```
+
+## 6.0 Analyse Results & Characterize Segment  
+### 6.1 Analysis of Results  
+
+Now that we have defined and segmented our customers, we examined the distribution of customers across the segments using a Tree Map. This provided clarity on the VIP segment of this E-commence business.
+
+```{r}
+rfm_tab2 %>%
+  group_by(segment) %>%
+  summarise(
+    Count = n()
+  ) %>%
+  ungroup() %>%
+  ggplot(aes(area = Count, fill = Count, label = paste(segment, Count, sep = "\n"))) + 
+  geom_treemap() +
+  geom_treemap_text(place = "centre", size = 10, colour = "white") + 
+  labs(subtitle = "Customer Segmentation based on RFM Scores",
+           caption = stringr::str_glue("Data as of {as.Date('2017-12-08')}"))
+```
+
+From the visualization above, it is evident that **high-value (VIPs)** customers take up **21 percent** of the overall customer segment. Most customers of this E-commence business are classified as *loyal customers* taking up **27 percent**. Meaning they spend good money and respond to promotions well.
+
+We further a profiled the customer segments to understand the distribution of their recency, purchase frequency and revenue contribution during the period.
+```{r, include=FALSE}
+median_recency_plot <- rfm_plot_median_recency(rfm_tab2)+ theme(
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major.x = element_line(color = "lightgrey", linewidth = 0.05, linetype = 1),
+    text = element_text(size = 10),
+    axis.text.x = element_text(hjust = 0.6, size = 10),
+    axis.text.y = element_text(hjust = 0.6, size = 10))
+```
+
+```{r}
+median_recency_plot
+```
+
+From the bar graph above it is clear that VIPs had purchased from the E-Commence store recently while the Lost Customer segment had taken a long time since they did purchase from the E-Commence store.
+```{r, include=FALSE}
+median_frequency_plot <- rfm_plot_median_frequency(rfm_tab2)+ theme(
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major.x = element_line(color = "lightgrey", linewidth = 0.05, linetype = 1),
+    text = element_text(size = 10),
+    axis.text.x = element_text(hjust = 0.6, size = 10),
+    axis.text.y = element_text(hjust = 0.6, size = 10))
+```
+
+```{r}
+median_frequency_plot
+```
+
+Moving right to the bar graph visualizing the median frequency by segment. Again, it is noticable that the VIPs made the highest purchases recurrently but also contributed the most to the revenue of the E-commence business (Ref to Median Monetary Value by Segment graph below)
+```{r, include=FALSE}
+median_monetary_plot <- rfm_plot_median_monetary(rfm_tab2) + theme(
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major.x = element_line(color = "lightgrey", linewidth = 0.05, linetype = 1),
+    text = element_text(size = 10),
+    axis.text.x = element_text(hjust = 0.6, size = 10),
+    axis.text.y = element_text(hjust = 0.6, size = 10))
+```
+
+```{r}
+median_monetary_plot
+```
+
+### 6.2 Characterization of VIP Customer Segment
+Ran some summary descriptive statistics on the filtered VIP customer segment and:
+
+- The minimum number of transactions for all customers under this segment was **58** transactions totaling to a minimum of **935 pounds** during this reporting period.  
+- On average each VIP customer overall spent **2,668 pounds** and a maximum of **280,206 pounds**.
+```{r}
+rfm_tab2 %>% filter(segment == "VIPs") %>% summary()
+```
+
+```{r}
+vip_table <- rfm_tab2 %>%
+  filter(segment == "VIPs") %>%
+  inner_join(dfCopy, by = c("customer_id" = "CustomerID")) %>%
+  mutate(recency_days = as.numeric(recency_days),
+         Revenue = Quantity * UnitPrice,
+         Country = stringr::str_replace_all(Country, rep_str),
+         Country = fct_relevel(Country),
+         Month = lubridate::month(InvoiceDate, label=TRUE, abbr=FALSE),
+         Year = year(InvoiceDate)) %>%
+  select(-c(3,4,5,6,7,8,9))
+```
+
+```{r}
+summary(vip_table)
+```
+
+- We further investigated which countries most of the high-value customers came from. Most of the high-value Customers were from **United Kingdom**, followed by **Ireland** and **German** in this order. Get more information from the visualization below.
+```{r}
+vip_table %>%
+  group_by(Country) %>%
+  summarise(
+    Count = n()
+  ) %>%
+  ungroup() %>%
+  ggplot(aes(x = Count, y = reorder(Country, Count))) +
+           geom_col(width = 0.7, fill = "lightblue") +
+           theme_minimal() +
+           labs(subtitle = "VIP Customers Disaggregated by Country",
+           x = "Count",
+           y = "Country",
+           caption = stringr::str_glue("Data as of {as.Date('2017-12-08')}")) +
+  theme(
+    panel.grid = element_blank(),
+    panel.grid.major.x = element_line(color = "lightgrey", linewidth = 0.05, linetype = 1),
+    text = element_text(size = 10),
+    axis.text.x = element_text(hjust = 0.6, size = 10),
+    axis.text.y = element_text(hjust = 0.6, size = 10))
+```
+
+- **White Hanging Heart T-Light Holder**, **Jumbo Bag Red RetroSpot** and **Regency Cakestand 3 Tie** were the most popularly purchased product items by this VIP customer segment.
+
+Lastly, since this is a gift shop sort of E-commence business, it would be nice to know what months or season of the year this high-value customer segment makes the most purchases.
+```{r}
+vip_table %>%
+  filter(Year == 2017) %>%
+  group_by(Month) %>%
+  summarise(
+    Total_Revenue = sum(Revenue),
+    Total_Invoices = length(unique(InvoiceNo))
+  ) %>%
+  ungroup() %>%
+  ggplot(aes(x = Total_Invoices, y = Month, size = Total_Revenue, color = Month)) +
+  geom_point(alpha=0.5) +
+  scale_size(range = c(.1, 24), name="Total Revenue") +
+  scale_fill_viridis(discrete=TRUE, guide=FALSE, option="A") +
+  theme_minimal() +
+  theme(
+    legend.position="bottom",
+    panel.grid = element_blank(),
+    panel.grid.major.y = element_line(color = "lightgrey", linewidth = 0.05, linetype = 1),
+    text = element_text(size = 10),
+    axis.text.x = element_text(hjust = 0.6, size = 10),
+    axis.text.y = element_text(hjust = 0.6, size = 10)) +
+  labs(subtitle = " Plot showing Sales per Month Aggregated by Revenue",
+           x = "Total Monthly Sales",
+           y = "Months of the Year",
+           caption = stringr::str_glue("Data as of {as.Date('2017-12-08')}")) +
+  theme(legend.position="none")
+```
+
+From the above plot, it is evident that most of the customers clustered under the high-value or VIP segment of this project make the most purchases and generate the most revenue during the last quarter of the year i.e., Months of **October**, **November** and **December**.  
+
+## 7.0 Conclusion
+
+We can use promotional marketing strategies like discounts on commonly purchased items or discounts applied if a certain total invoice sum is surpassed during the last quarter of the year as a nudge to entice this segment of customers to keep around but also entice the loyal customer segment to join the high-value customers. During the other seasons of the year, we can use cues to reminder, to remind  this segment of customers of existing exiting deals, products and offers.

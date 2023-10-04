@@ -1,0 +1,71 @@
+Assignment Objective: It is about detecting and characterizing the VIP clients of an English e-commerce company.
+* The first step is the realization of an EDA. At some point in this exploratory data analysis you will have to recognize why exactly you are going to have a hard time finding a cluster small enough to qualify as VIP and somehow economically viable.
+* Every step, what he is. what is it for, what do you hope to obtain in each step, and the comparison between the results obtained and those expected... and its meaning for him.
+* Explain what the objectives of your study are and present a generic, storytelling-style summary of the variables you have in the dataset.
+
+QN: Explore Data to determine metrics to use to define who a VIP customer is.
+Option: Use Invoice No. To amount spent by customer / purchase regardless of time to determine VIP?
+Option: Use Time Period to segment VIPS. customer purchase amount in a given period to determine VIP?
+Option: Use Purchase frequency to segment VIPs. Use the frequency a particular customer 
+Option: Can I use Country to segment VIPs. Choose VIP based on customer purchase per invoice. 
+Option: Can I use Country to segment VIPs. Choose VIP based on customer purchare per period (week / Month / Year)
+Option: Can I find out how much sales are made in a particular period by the E-Commence company and then subsquently find out how much of a percentage did each of these customers contribute to it.
+
+Intended Methods / Frameworks to use: RFM (Recency, Frequency, Monetary) analysis
+
+Introduction
+	Motivation
+	Methods (planned to follow)
+		How-why-expected results
+The dataset
+	Description
+	Data overview
+		File(s), table(s)
+		Variables in each able
+Import Python libraries
+	"import pandas as pd"
+	Loading the dataset in Python
+Structured based data exploration
+	Purpose of EDA
+		Finding missing and erroneous data
+		Gain deep and insights from the dataset
+		Identify the important features in your dataset
+		Perform hypothesis testing for the specific model
+		Estimate the parameters and associated intervals
+	Tools of EDA
+		Classification and dimensionality reduction techniques
+		Univariate analysis
+		Bivariate analysis
+		Multivariate analysis
+		Predictive analysis
+	Display the first 5 observations (df.head())
+	Display the last 5 observations (df.tail())
+	Display the number of variables and observations (df.shape)
+	Display the variable names and data types (df.dtype)
+	Count the number of non-missing values of each variable (df.count())
+	Descriptive statistics (df.describe(include = 'all'))
+	Display the complete summary of the dataset (df.info())
+	Data cleaning
+		Handling missing values
+			Detecting missing values (df.isnull().sum())
+			Data deduplication
+		Hig level statistics
+			Features
+			Correlation matrix
+			Distributions
+		Univariate analysis
+		Bivariate analysis
+		Multivariate analysis
+	Missing values treatment
+		rop the variables
+		Drop the observation
+		Mean imputation, or median imputation, or mode imputation
+			df.dropna(how = 'any', inplace = True)
+			df.isnull().sum(), to check after
+	How many unique observations  are made
+	Data visualizations
+		Target variables, if any
+		Display
+
+Notes: 
+* Installing the R Kernel requires updating Conda Package Manager to the latest version that contains a faster solver called Libmamba plugin.
